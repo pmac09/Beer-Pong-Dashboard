@@ -1,0 +1,318 @@
+
+
+## FUNCTIONS ----
+games <- function() {
+  
+  # Download games list from firebase
+  games <- suppressWarnings(
+    as_tibble(download(projectURL, paste0("Beer-Pong-Dashboard/games/")))
+  )
+  
+  # Reorder columns
+  games <- games[,c("GAME_NAME", "HOME_TEAM", "AWAY_TEAM")]
+  return(games)
+  
+} # Returns games table from firebase
+teams <- function() {
+  
+  # Download teams list from firebase
+  teams <- suppressWarnings(
+    as_tibble(download(projectURL, paste0("Beer-Pong-Dashboard/teams/")))
+  )
+  
+  # Return null if no teams found
+  if(nrow(teams) < 1){
+    return(NULL)
+  }
+  
+  # Reorder columns
+  teams <- teams[,c("TEAM_NAME", "PLAYER_1", "PLAYER_2")]
+  return(teams)
+  
+} # Returns teams table from firebase
+
+game <- function(games, gameName){
+  if(is.null(gameName)){
+    game <- NULL
+  } else if (gameName == 'No Games Available'){
+    game <- NULL
+  } else {
+    game <- games[games$GAME_NAME == gameName,]
+  }
+  return(game)
+} # Return teams from selected game
+team <- function(teams, teamName){
+  if(is.null(teamName)){
+    team <- NULL
+  } else {
+    team <- teams[teams$TEAM_NAME == teamName,]
+  }
+  return(team)
+} # Returns players from selected team
+
+scoreChange <- function(OTHER_TEAM, SHOT_TYPE){
+  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 1,
+            OTHER_TEAM                                ~ 0,
+            SHOT_TYPE == 'HIT'                        ~ 1,
+            SHOT_TYPE == 'MISS'                       ~ 0,
+            SHOT_TYPE == 'OVERTHROW'                  ~ 0,
+            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
+            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
+            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
+            SHOT_TYPE == 'SAME CUP'                   ~ 2,
+            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
+} # Evaluates stats line to determine score increment
+shotChange <- function(OTHER_TEAM, SHOT_TYPE){
+  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 0,
+            OTHER_TEAM                                ~ 0,
+            SHOT_TYPE == 'HIT'                        ~ 1,
+            SHOT_TYPE == 'MISS'                       ~ 1,
+            SHOT_TYPE == 'OVERTHROW'                  ~ 1,
+            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
+            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
+            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
+            SHOT_TYPE == 'SAME CUP'                   ~ 1,
+            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
+}  # Evaluates stats line to determine shot increment
+maxScore <- function(target){  target * 10 + (target*(target+1) / 2)} # Used in Fantasy Points scaling
+
+gameData <- function(game){
+  
+  if(is.null(game)){
+    return(NULL)
+  }
+  
+  gameName <- game$GAME_NAME
+  homeTeam <- game$HOME_TEAM
+  
+  # Set target 
+  target <- ifelse(substr(gameName,1,1)=='I',6,10)
+  noPlayers <- ifelse(substr(gameName,1,1)=='I',2,4)
+  
+  # Download game data from firebase
+  data <- suppressWarnings(as_tibble(download(projectURL, paste0("Beer-Pong-Dashboard/data/",gameName))))
+  
+  # Calcuate cumulative scoring
+  data1 <- data[,c("DATE_TIME", "GAME", "TEAM", "PLAYER", "SHOT_TYPE")] %>% # Reorder columns
+    mutate(HOME_TEAM = homeTeam) %>%                                        # Add home team
+    mutate(SHOT_CHANGE = shotChange(FALSE, SHOT_TYPE)) %>%                  #
+    mutate(SCORE_CHANGE = scoreChange(FALSE, SHOT_TYPE)) %>%
+    mutate(HOME_SHOT_CHANGE  = shotChange(TEAM!=HOME_TEAM, SHOT_TYPE)) %>%
+    mutate(HOME_SHOT_CUMUL   = cumsum(HOME_SHOT_CHANGE)) %>%
+    mutate(HOME_SCORE_CHANGE = scoreChange(TEAM!=HOME_TEAM, SHOT_TYPE)) %>%
+    mutate(HOME_SCORE_CUMUL  = cumsum(HOME_SCORE_CHANGE)) %>%
+    mutate(AWAY_SHOT_CHANGE  = shotChange(TEAM==HOME_TEAM, SHOT_TYPE)) %>%
+    mutate(AWAY_SHOT_CUMUL   = cumsum(AWAY_SHOT_CHANGE)) %>%
+    mutate(AWAY_SCORE_CHANGE = scoreChange(TEAM==HOME_TEAM, SHOT_TYPE)) %>%
+    mutate(AWAY_SCORE_CUMUL  = cumsum(AWAY_SCORE_CHANGE)) %>%
+    mutate(TEAM_SCORE_CHANGE = ifelse(HOME_TEAM == TEAM, HOME_SCORE_CHANGE, AWAY_SCORE_CHANGE)) %>%
+    mutate(TEAM_SCORE_CUMUL  = ifelse(HOME_TEAM == TEAM, HOME_SCORE_CUMUL,  AWAY_SCORE_CUMUL)) %>%
+    mutate(OPPO_SCORE_CHANGE = ifelse(HOME_TEAM == TEAM, AWAY_SCORE_CHANGE, HOME_SCORE_CHANGE)) %>%
+    mutate(OPPO_SCORE_CUMUL  = ifelse(HOME_TEAM == TEAM, AWAY_SCORE_CUMUL,  HOME_SCORE_CUMUL)) %>%
+    mutate(TARGET = target)
+  
+  # Calculate target if theres a draw
+  for (row in 2:nrow(data1)) {
+    data1$TARGET[row] <- ifelse(data1$HOME_SCORE_CUMUL[row] == data1$AWAY_SCORE_CUMUL[row] & data1$HOME_SCORE_CUMUL[row] == data1$TARGET[row-1],
+                                data1$TARGET[row-1] + 3,
+                                data1$TARGET[row-1])
+  }
+  
+  data2 <- data1 %>%
+    mutate(WINNER = ifelse((TARGET == HOME_SCORE_CUMUL | TARGET == AWAY_SCORE_CUMUL) &
+                             HOME_SCORE_CUMUL != AWAY_SCORE_CUMUL &
+                             SHOT_TYPE != 'REDEMPTION' &
+                             row_number() == nrow(data1), 1,0)) %>%
+    mutate(CLUTCH = ifelse(SHOT_TYPE %in% c('BALLS BACK', 'SAME CUP', 'REDEMPTION') | WINNER == 1,1,0)) %>%
+    mutate(FANTASY_POINTS_CHANGE = (10 + TEAM_SCORE_CUMUL) * TEAM_SCORE_CHANGE) %>%                                                                                      ## Basic Cup
+    mutate(FANTASY_POINTS_CHANGE = ifelse(SHOT_TYPE == 'OVERTHROW', FANTASY_POINTS_CHANGE - ((10 + OPPO_SCORE_CUMUL) * OPPO_SCORE_CHANGE), FANTASY_POINTS_CHANGE)) %>%   ## Overthrow 
+    mutate(FANTASY_POINTS_CHANGE = ifelse(SHOT_TYPE == 'TRICKSHOT HIT', FANTASY_POINTS_CHANGE + 15 , FANTASY_POINTS_CHANGE)) %>%                                         ## Trickshot Hit 
+    #mutate(FANTASY_POINTS_CHANGE = ifelse(SHOT_TYPE == 'TRICKSHOT MISS', FANTASY_POINTS_CHANGE + 2 , FANTASY_POINTS_CHANGE)) %>%                                         ## Trickshot Miss 
+    mutate(FANTASY_POINTS_CHANGE = ifelse(CLUTCH > 0, FANTASY_POINTS_CHANGE + 5 , FANTASY_POINTS_CHANGE)) %>%                                                            ## Clutch 
+    mutate(TOTAL_FP_CUMUL = cumsum(FANTASY_POINTS_CHANGE)) %>%
+    mutate(TOTAL_FP_PCNT = (maxScore(HOME_SCORE_CUMUL)+maxScore(AWAY_SCORE_CUMUL)) / (maxScore(TARGET) + maxScore(pmin(HOME_SCORE_CUMUL,AWAY_SCORE_CUMUL)))) %>%
+    mutate(TOTAL_FP_SCALE = round(noPlayers*75 * TOTAL_FP_PCNT,0)) ### NEED TOO FIX THIS - total score based on number of players
+  
+  
+  players <- sort(unique(data2$PLAYER))
+  
+  for (i in 1:length(players)){
+    
+    colName <- paste0('PLAYER',i)
+    data2 <- data2 %>%
+      mutate(!!paste0(colName,'_FP_CHANGE'):= ifelse(PLAYER == players[i], FANTASY_POINTS_CHANGE, 0)) %>%
+      mutate(!!paste0(colName,'_FP_CUMUL'):= cumsum(!!as.name(paste0(colName,'_FP_CHANGE')))) %>%
+      mutate(!!paste0(colName,'_FP_SCALE'):= ifelse(TOTAL_FP_CUMUL > 0 , round(pmax(!!as.name(paste0(colName,'_FP_CUMUL')),0) / TOTAL_FP_CUMUL * TOTAL_FP_SCALE,0),0))
+  }
+  
+  return(data2)
+}
+statline <- function(gameData){
+  
+  if(is.null(gameData)){
+    return(NULL)
+  }
+  
+  data <- gameData %>%
+    group_by(TEAM, PLAYER) %>%
+    summarise(
+      HITS       = sum(ifelse(SCORE_CHANGE>0,1,0)),
+      THROWS     = sum(SHOT_CHANGE),
+      OVERTHROWS = sum(ifelse(SHOT_TYPE == 'OVERTHROW',1,0)),
+      CLUTCH     = sum(CLUTCH),
+      T_HITS     = sum(ifelse(SHOT_TYPE == 'TRICKSHOT HIT',1,0)),
+      T_THROWS   = sum(ifelse(SHOT_TYPE %in% c('TRICKSHOT HIT','TRICKSHOT MISS'),1,0))
+    ) %>%
+    arrange(PLAYER)
+  
+  fantasy <- gather(gameData[nrow(gameData), grep('PLAYER\\d_FP_SCALE',  names(gameData))]) %>%
+    arrange(key)
+  
+  data$FANTASY <- fantasy$value
+  data$ICON <- c('gun', 'target', 'garbage', 'cone')[1:nrow(data)]
+  
+  return(data)
+}
+
+displayTeam <- function(teamName, teamScore, scoreColour, player1, player2){
+  
+  # Handle nulls
+  teamName = ifelse(is.null(teamName), "TEAM NAME", teamName)
+  teamScore = ifelse(is.null(teamScore), 0, teamScore)
+  scoreColour = ifelse(identical(scoreColour, character(0)) , 'default', scoreColour)
+  
+  ui <- productList(
+    headerListItem(
+      teamName   = teamName, 
+      score      = teamScore, 
+      scoreColor = scoreColour
+    ),
+    displayPlayer(player1),
+    displayPlayer(player2)
+  )
+  
+  return(ui)
+}
+displayPlayer <- function(player){
+  
+  if(is.null(player)){
+    playerPic  = "BLANK.png"
+    playerName = "PLAYER"
+    lineOne    = "0-0 (0%) | FP: 0"
+    lineTwo    = "TS: 0-0 | CLT: 0 | OT: 0"
+    icon       = NULL
+  } else if(is.na(player$PLAYER)[1]){
+    return(NULL)
+  } else {
+    playerPic  = paste0(player$PLAYER, '.jpg')
+    playerName = player$PLAYER
+    lineOne    = paste0(player$HITS,"-",player$THROWS, " (", ifelse(player$THROWS>0,round(player$HITS/player$THROWS*100,1),0), "%) | FP: ", player$FANTASY)
+    lineTwo    = paste0("TS: ",player$T_HITS,"-",player$T_THROWS," | CLT: ",player$CLUTCH," | OT: ",player$OVERTHROWS)
+    icon       = paste0("./icons/", player$ICON ,".gif")
+  }
+  
+  ui <- list(
+    playerListItem(
+      playerPic  = playerPic, 
+      playerName = playerName, 
+      lineOne    = lineOne, 
+      lineTwo    = lineTwo, 
+      icon       = icon
+    )
+  )
+  
+  return(ui)
+}
+
+uiGameDetails <- function(homeTeam=NULL, awayTeam=NULL, gameData=NULL){
+
+  homeScore <- gameData$HOME_SCORE_CUMUL[nrow(gameData)]
+  awayScore <- gameData$AWAY_SCORE_CUMUL[nrow(gameData)]
+  
+  statline <- statline(gameData)
+  
+  uiHome <- displayTeam(
+    teamName    = homeTeam$TEAM_NAME,
+    teamScore   = homeScore,
+    scoreColour = case_when(is.null(homeScore)                       ~ 'default',
+                            homeScore >  awayScore                   ~ 'success',
+                            homeScore <  awayScore                   ~ 'danger',
+                            homeScore == awayScore & homeScore == 0  ~ 'default',
+                            homeScore == awayScore                   ~ 'warning',
+                            TRUE                                     ~ 'default'),
+    player1     = statline[statline$PLAYER == homeTeam$PLAYER_1, ],
+    player2     = statline[statline$PLAYER == homeTeam$PLAYER_2, ] 
+  )
+  
+  uiAway <- displayTeam(
+    teamName  = awayTeam$TEAM_NAME,
+    teamScore = awayScore,
+    scoreColour = case_when(is.null(awayScore)                       ~ 'default',
+                            homeScore <  awayScore                   ~ 'success',
+                            homeScore >  awayScore                   ~ 'danger',
+                            homeScore == awayScore & homeScore == 0  ~ 'default',
+                            homeScore == awayScore                   ~ 'warning',
+                            TRUE                                     ~ 'default'),
+    player1     = statline[statline$PLAYER == awayTeam$PLAYER_1, ],
+    player2     = statline[statline$PLAYER == awayTeam$PLAYER_2, ] 
+  )
+  #data <- statline(gameData)
+  
+  ui <- list(
+    column(width=6, uiHome),
+    column(width=6, uiAway)
+  )
+  
+  return(ui)
+}
+
+
+
+
+## REACTIVE FUNCTIONS ----
+games_r <- reactive({
+  games <- games()
+  return(games)
+})
+teams_r <- reactive({
+  teams <- teams()
+  return(teams)
+})
+
+game_r <- reactive({
+  game <- game(games_r(), input$lstGameSelected)
+  return(game)
+}) 
+gameData_r <- reactive({
+  gameData <- gameData(game_r())
+  return(gameData)
+}) 
+
+## UI RENDERS ----
+output$uiLstGameSelected <- renderUI({
+
+  # Get games table
+  games <- games_r()
+  
+  # Handle null games
+  gamesList <- c("No Games Available", games_r()$GAME_NAME)
+  
+  # Build UI
+  ui <- selectInput(
+    inputId= "lstGameSelected",
+    label  = NULL,
+    choices= gamesList
+  )
+  
+  return(ui)
+}) # Render game list 
+output$uiGameDetails <- renderUI({
+  req(input$lstGameSelected) # Require dropdown list be generated
+
+  #Generate UI
+  ui <- uiGameDetails(
+    homeTeam = team(teams_r(), game_r()$HOME_TEAM),
+    awayTeam = team(teams_r(), game_r()$AWAY_TEAM),
+    gameData = gameData_r())
+  return(ui)
+}) # Render left team side of stats sheet
