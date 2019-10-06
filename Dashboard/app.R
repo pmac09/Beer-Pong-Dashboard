@@ -22,14 +22,16 @@ sourceAll('./functions')
 
 ## UI -----
 ui <- dashboardPage(
+  title = "Beer Pong Dashboard",
+  
   ## HEADER ----
-  dashboardHeader(title = 'DRAFT 2020'),
+  dashboardHeader(title = textOutput('txtTournamentName')),
   
   ## SIDEBAR ----
   dashboardSidebar(
     collapsed = TRUE,
     sidebarMenu(
-      menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
+      #menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
       menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs"))
     )
   ),
@@ -55,7 +57,7 @@ ui <- dashboardPage(
 ## SERVER -----
 server <- function(input, output, session) {
   
-  source('./server/serverDashboard.R', local= TRUE)$value
+  #source('./server/serverDashboard.R', local= TRUE)$value
   source('./server/serverSettings.R', local= TRUE)$value
   
 }

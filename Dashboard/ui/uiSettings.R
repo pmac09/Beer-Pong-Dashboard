@@ -9,56 +9,38 @@ fluidRow(
       tabsetPanel(
         type = "tabs",
         
-        ## PLAYER ----
+        ## TOURNAMENT ----
         tabPanel(
-          "Players", 
+          "Tournaments",
           hr(),
-          
-          column(
-            width= 6,
-            textInput(inputId= "txtPlayerName", label= "Player Name"),
-            actionButton(inputId= "btnAddPlayer", label= "Add Player")
-          ),
-          column(
-            width= 6,
-            h4("Player List"),
-            textOutput("tblPlayerList")
+          h3("Tournaments"),
+          hr(),
+          column(width = 6, 
+                 DT::dataTableOutput("tblTournamentList"),
+                 hr(),
+                 actionButton('btnSelectTournament', "Select Tournament")),
+          column(width = 6,
+            textInput('txtNewTournament', label= "New Tournament", width = '100%'),
+            actionButton('btnAddTournament', "Add Tournament")
+            )
+        ),
+        
+        ## PLAYERS ----
+        tabPanel(
+          "Players",
+          hr(),
+          h3("Players"),
+          hr(),
+          column(width = 6, 
+                 DT::dataTableOutput("tblPlayerList"),
+                 hr()
+                 ),
+          column(width = 6,
+                 textInput('txtNewPlayer', label= "New Player", width = '100%'),
+                 actionButton('btnAddPlayer', "Add Player")
           )
-        ),
-        
-        ## TEAMS ----
-        tabPanel(
-          "Teams", 
-          hr(),
-          h4("Teams List"),
-          #textOutput("tblPlayerList"),
-          hr(),
-          DT::dataTableOutput("tblTeamList"),
-          hr(),
-          textInput(inputId= "txtTeamName", label= "Team Name"),
-          uiOutput("uiLstTeamPlayer1"),
-          uiOutput("uiLstTeamPlayer2"),
-          actionButton(inputId= "btnAddTeam", label= "Add Team")
-        ),
-        
-        ## GAMES ----
-        tabPanel(
-          "Games", 
-          hr(),
-          h4("Games List"),
-          hr(),
-          DT::dataTableOutput("tblGameList"),
-          hr(),
-          textInput(inputId= "txtGameName", label= "Game Name"),
-          uiOutput("uiLstHomeTeam"),
-          uiOutput("uiLstAwayTeam"),
-          actionButton(inputId= "btnAddGame", label= "Add Game")
-        ),
-        tabPanel(
-          "Reset",
-          hr(),
-          "Reset Everything"
         )
+        
       )
     )
   )
