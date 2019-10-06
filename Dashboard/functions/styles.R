@@ -25,5 +25,9 @@ styles <- '
 .products-list .product-title .label{
   font-size:100%;
 }
+
+.info-box-text, .progress-description {
+  font-size: 12px;
+}
 '
 

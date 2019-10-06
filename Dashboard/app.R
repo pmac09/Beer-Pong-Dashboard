@@ -12,6 +12,7 @@ library(fireData)
 library(Jmisc)
 library(tidyverse)
 library(DT)
+library(highcharter)
 library(reactlog)
 
 # Source functions
