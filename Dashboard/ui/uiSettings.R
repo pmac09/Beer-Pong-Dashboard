@@ -39,6 +39,42 @@ fluidRow(
                  textInput('txtNewPlayer', label= "New Player", width = '100%'),
                  actionButton('btnAddPlayer', "Add Player")
           )
+        ),
+        
+        ## TEAM ----
+        tabPanel(
+          "Teams",
+          hr(),
+          h3("Teams"),
+          hr(),
+          column(width = 6, 
+                 DT::dataTableOutput("tblTeamList"),
+                 hr()
+          ),
+          column(width = 6,
+                 uiOutput('uiLstPlayer1'),
+                 uiOutput('uiLstPlayer2'),
+                 textInput('txtTeamName', label= "Team Name", width = '100%'),
+                 actionButton('btnAddTeam', "Add Team")
+          )
+        ),
+        
+        ## GAME ----
+        tabPanel(
+          "Games",
+          hr(),
+          h3("Games"),
+          hr(),
+          column(width = 6, 
+                 DT::dataTableOutput("tblGameList"),
+                 hr()
+          ),
+          column(width = 6,
+                 uiOutput('uiLstTeam1'),
+                 uiOutput('uiLstTeam2'),
+                 textInput('txtGameName', label= "Game Name", width = '100%'),
+                 actionButton('btnAddGame', "Add Game")
+          )
         )
         
       )
