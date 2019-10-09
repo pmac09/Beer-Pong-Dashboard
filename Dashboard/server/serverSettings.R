@@ -54,20 +54,6 @@ addTournament <- function(projectURL, vTournamentName){
   
   return(vNewTournamentList)
 }
-deleteTournament <- function(projectURL, vTournamentName){
-  
-  # Download current tournament list
-  vTournamentList <- tournamentList(projectURL)
-  
-  # Select all that dont equal input
-  vNewTournamentList <- vTournamentList[vTournamentList$TOURNAMENT_NAME != vTournamentName,]
-  
-  # Save to firebase
-  firebaseSave(projectURL, "tournaments", vNewTournamentList)
-  
-  return(vNewTournamentList)
-  
-}
 selectTournament <- function(projectURL, vTournamentName){
   
   # Download current tournament list
@@ -83,7 +69,34 @@ selectTournament <- function(projectURL, vTournamentName){
   return(vTournamentList)
   
 }
-
+deleteTournament <- function(projectURL, vTournamentName){
+  
+  # Download current tournament list
+  vTournamentList <- tournamentList(projectURL)
+  
+  # Select all that dont equal input
+  vNewTournamentList <- vTournamentList[vTournamentList$TOURNAMENT_NAME != vTournamentName,]
+  
+  # Save to firebase
+  firebaseSave(projectURL, "tournaments", vNewTournamentList)
+  
+  return(vNewTournamentList)
+  
+}
+hardDeleteTournament <- function(projectURL, vTournamentName){
+  
+  # Download current tournament list
+  vTournamentList <- tournamentList(projectURL)
+  
+  # Select all that dont equal input
+  vNewTournamentList <- vTournamentList[vTournamentList$TOURNAMENT_NAME != vTournamentName,]
+  
+  # Delete from firebase
+  delete(vDelete, projectURL, paste0('Beer-Pong-Dashboard/', vTournamentName))
+  
+  return(vNewTournamentList)
+  
+}
 teamList <- function(projectURL, vTournamentName){
   
   dir <- paste0(vTournamentName,'/teams')

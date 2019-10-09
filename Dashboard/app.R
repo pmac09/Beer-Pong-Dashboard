@@ -31,7 +31,7 @@ ui <- dashboardPage(
   dashboardSidebar(
     collapsed = TRUE,
     sidebarMenu(
-      #menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
+      menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
       menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs"))
     )
   ),
@@ -57,7 +57,7 @@ ui <- dashboardPage(
 ## SERVER -----
 server <- function(input, output, session) {
   
-  #source('./server/serverDashboard.R', local= TRUE)$value
+  source('./server/serverDashboard.R', local= TRUE)$value
   source('./server/serverSettings.R', local= TRUE)$value
   
 }

@@ -1,82 +1,27 @@
-
 ## FUNCTIONS ----
-games <- function() {
-  
-  # Download games list from firebase
-  games <- suppressWarnings(
-    as_tibble(download(projectURL, paste0("Beer-Pong-Dashboard/games/")))
-  )
-  
-  # Reorder columns
-  games <- games[,c("GAME_NAME", "HOME_TEAM", "AWAY_TEAM")]
-  return(games)
-  
-} # Returns games table from firebase
-teams <- function() {
-  
-  # Download teams list from firebase
-  teams <- suppressWarnings(
-    as_tibble(download(projectURL, paste0("Beer-Pong-Dashboard/teams/")))
-  )
-  
-  # Return null if no teams found
-  if(nrow(teams) < 1){
-    return(NULL)
-  }
-  
-  # Reorder columns
-  teams <- teams[,c("TEAM_NAME", "PLAYER_1", "PLAYER_2")]
-  return(teams)
-  
-} # Returns teams table from firebase
 
-game <- function(games, gameName){
-  if(is.null(gameName)){
+game <- function(vGameList, vGameName){
+  if(is.null(vGameName)){
     game <- NULL
-  } else if (gameName == 'No Games Available'){
+  } else if (vGameName == 'No Games Available'){
     game <- NULL
   } else {
-    game <- games[games$GAME_NAME == gameName,]
+    game <- vGameList[vGameList$GAME_NAME == vGameName,]
   }
   return(game)
 } # Return teams from selected game
-team <- function(teams, teamName){
-  if(is.null(teamName)){
+team <- function(vTeamList, vteamName){
+  if(is.null(vteamName)){
     team <- NULL
   } else {
-    team <- teams[teams$TEAM_NAME == teamName,]
+    team <- vTeamList[vTeamList$TEAM_NAME == vteamName,]
   }
   return(team)
 } # Returns players from selected team
 
-scoreChange <- function(OTHER_TEAM, SHOT_TYPE){
-  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 1,
-            OTHER_TEAM                                ~ 0,
-            SHOT_TYPE == 'HIT'                        ~ 1,
-            SHOT_TYPE == 'MISS'                       ~ 0,
-            SHOT_TYPE == 'OVERTHROW'                  ~ 0,
-            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
-            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
-            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
-            SHOT_TYPE == 'SAME CUP'                   ~ 2,
-            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
-} # Evaluates stats line to determine score increment
-shotChange <- function(OTHER_TEAM, SHOT_TYPE){
-  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 0,
-            OTHER_TEAM                                ~ 0,
-            SHOT_TYPE == 'HIT'                        ~ 1,
-            SHOT_TYPE == 'MISS'                       ~ 1,
-            SHOT_TYPE == 'OVERTHROW'                  ~ 1,
-            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
-            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
-            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
-            SHOT_TYPE == 'SAME CUP'                   ~ 1,
-            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
-}  # Evaluates stats line to determine shot increment
-maxScore <- function(target){  target * 20 + (target*(target+1) / 2)} # Used in Fantasy Points scaling
-
-gameData <- function(gameName){
-  data <- suppressWarnings(download(projectURL, paste0("Beer-Pong-Dashboard/data/",gameName)))
+gameData <- function(vGameName, vTournamentName){
+  path <- paste0(vTournamentName, "/data/", vGameName)
+  data <- firebaseDownload(projectURL, path)
   return(data)
 }
 statsData <- function(game, gameData){
@@ -150,9 +95,38 @@ statsData <- function(game, gameData){
   
   return(data2)
 }
-leagueData <- function(games){
+
+scoreChange <- function(OTHER_TEAM, SHOT_TYPE){
+  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 1,
+            OTHER_TEAM                                ~ 0,
+            SHOT_TYPE == 'HIT'                        ~ 1,
+            SHOT_TYPE == 'MISS'                       ~ 0,
+            SHOT_TYPE == 'OVERTHROW'                  ~ 0,
+            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
+            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
+            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
+            SHOT_TYPE == 'SAME CUP'                   ~ 2,
+            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
+} # Evaluates stats line to determine score increment
+shotChange <- function(OTHER_TEAM, SHOT_TYPE){
+  case_when(OTHER_TEAM & SHOT_TYPE == 'OVERTHROW'     ~ 0,
+            OTHER_TEAM                                ~ 0,
+            SHOT_TYPE == 'HIT'                        ~ 1,
+            SHOT_TYPE == 'MISS'                       ~ 1,
+            SHOT_TYPE == 'OVERTHROW'                  ~ 1,
+            SHOT_TYPE == 'TRICKSHOT HIT'              ~ 1,
+            SHOT_TYPE == 'TRICKSHOT MISS'             ~ 0,
+            SHOT_TYPE == 'BALLS BACK'                 ~ 1,
+            SHOT_TYPE == 'SAME CUP'                   ~ 1,
+            SHOT_TYPE == 'REDEMPTION'                 ~ 1)
+}  # Evaluates stats line to determine shot increment
+maxScore <- function(target){  target * 20 + (target*(target+1) / 2)} # Used in Fantasy Points scaling
+
+leagueData <- function(games, vTournamentName){
   
-  data <- gameData(NULL)
+  data <- gameData(NULL, vTournamentName)
+  
+  if(is.null(data)) return(NULL)
   
   leagueSummary <- tibble()
   leagueStats <- tibble()
@@ -168,6 +142,8 @@ leagueData <- function(games){
   return(leagueSummary) 
 }
 playerData <- function(ldata){
+  
+  if(is.null(ldata)) return(NULL)
   
   data <- ldata %>%
     group_by(PLAYER) %>%
@@ -192,6 +168,7 @@ playerData <- function(ldata){
 }
 teamData <- function(ldata){
   
+  if(is.null(ldata)) return(NULL)
   data <- ldata %>%
     filter(TEAM != PLAYER) %>%
     group_by(TEAM) %>%
@@ -491,25 +468,16 @@ uiFantasyWorm <- function(gameData){
 }
 
 ## REACTIVE FUNCTIONS ----
-games_r <- reactive({
-  games <- games()
-  return(games)
-})
-teams_r <- reactive({
-  teams <- teams()
-  return(teams)
-})
-
 game_r <- reactive({
-  game <- game(games_r(), input$lstGameSelected)
+  game <- game(gameList_r(), input$lstGameSelected)
   return(game)
 }) 
 statsData_r <- reactive({
-  statsData <- statsData(game_r(), gameData(game_r()$GAME_NAME))
+  statsData <- statsData(game_r(), gameData(game_r()$GAME_NAME, tournamentName_r()))
   return(statsData)
 }) 
 leagueData_r <- reactive({
-  data <- leagueData(games_r())
+  data <- leagueData(gameList_r(), tournamentName_r())
   return(data)
 })
 
@@ -517,10 +485,10 @@ leagueData_r <- reactive({
 output$uiLstGameSelected <- renderUI({
 
   # Get games table
-  games <- games_r()
+  games <- gameList_r()
   
   # Handle null games
-  gamesList <- c("No Games Available", games_r()$GAME_NAME)
+  gamesList <- c("No Games Available", gameList_r()$GAME_NAME)
   
   # Build UI
   ui <- selectInput(
@@ -536,8 +504,8 @@ output$uiGameDetails <- renderUI({
 
   #Generate UI
   ui <- uiGameDetails(
-    homeTeam = team(teams_r(), game_r()$HOME_TEAM),
-    awayTeam = team(teams_r(), game_r()$AWAY_TEAM),
+    homeTeam = team(teamList_r(), game_r()$HOME_TEAM),
+    awayTeam = team(teamList_r(), game_r()$AWAY_TEAM),
     gameData = statsData_r())
   return(ui)
 }) # Render left team side of stats sheet
@@ -553,6 +521,8 @@ output$uiFantasyWorm <- renderHighchart({
 output$tblPlayerStats <- renderDataTable({
   
   data <- playerData(leagueData_r())
+  if(is.null(data)) return(NULL)
+  
   table <- datatable(data,
                      rownames= FALSE,
                      options= list(paging= FALSE, 
@@ -574,6 +544,8 @@ output$tblPlayerStats <- renderDataTable({
 output$tblTeamStats <- renderDataTable({
   
   data <- teamData(leagueData_r())
+  if(is.null(data)) return(NULL)
+  
   table <- datatable(data,
                      rownames= FALSE,
                      options= list(paging= FALSE, 
