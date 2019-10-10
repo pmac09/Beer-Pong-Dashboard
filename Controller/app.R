@@ -78,7 +78,6 @@ server <- function(input, output, session) {
   gameList <- function(projectURL, vTournamentName){
     
     dir <- paste0(vTournamentName,'/games')
-    
     vGameList <- firebaseDownload(projectURL, dir) 
     
     if(is.null(vGameList)){
@@ -135,6 +134,20 @@ server <- function(input, output, session) {
     
     return(vNewGameData)
   }
+  undoScore <- function(vTournamentName, vGameData, vGameName){
+    
+    if(nrow(vGameData) == 0){
+      return(vGameData)
+    }
+    
+    vNewGameData <- vGameData[1:nrow(vGameData)-1,]
+    
+    # Save to firebase
+    dir <- paste0(vTournamentName,'/data/', vGameName)
+    firebaseSave(projectURL, dir, vNewGameData)
+    
+    return(vNewGameData)
+  }
   
   scoreData <- function(projectURL, gameName){
     data <- download(projectURL, paste0("Beer-Pong-Dashboard/data/",gameName))
@@ -165,7 +178,7 @@ server <- function(input, output, session) {
     return(vTournamentName)
   })
   gameList_r <- reactive({
-    rv$refresh 
+    rv$refreshGameList 
     vGameList <- gameList(projectURL, tournamentName_r())
     return(vGameList)
   })
@@ -220,13 +233,13 @@ server <- function(input, output, session) {
     
   })
   output$tblHistory <- renderDataTable({
+    req(input$lstGames)
     
     data <- gameData_r()
     if(is.null(data)) return(NULL)
     
     data <- data %>%
-      rownames_to_column('RN') %>%
-      mutate(RN = as.numeric(RN)) %>%
+      mutate(RN = row_number()) %>%
       arrange(desc(RN)) %>%
       select(RN, PLAYER, SHOT_TYPE) %>%
       rename('#' = RN)
@@ -253,7 +266,7 @@ server <- function(input, output, session) {
     return(ui)
   })
   
-  rv <- reactiveValues(teamSelected='', playerSelected = '', refresh = 1)
+  rv <- reactiveValues(teamSelected='', playerSelected = '', refreshGameList = 1, refresh = 1)
   
   observeEvent(input$btnT1P1,{
     rv$teamSelected  <- t1Name()
@@ -272,14 +285,72 @@ server <- function(input, output, session) {
     rv$playerSelected <- t2Player2()
   })
   
+  observeEvent(input$btnUndo,{
+    vUndoScore <- undoScore(tournamentName_r(), gameData_r(), input$lstGames)
+    rv$refresh <- rv$refresh  + 1 
+  })
   observeEvent(input$btnHit,{
     vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'HIT')
-    
     if(!is.null(vAddScore)){
       rv$playerSelected <- ''
       rv$refresh <- rv$refresh  + 1 
     }
-    
+  })
+  observeEvent(input$btnMiss,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'MISS')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnOverthrow,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'OVERTHROW')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnTrickHit,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'TRICKSHOT HIT')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnTrickMiss,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'TIRCKSHOT MISS')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnBallsBack,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'BALLS BACK')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnSameCup,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'SAME CUP')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  observeEvent(input$btnRedemption,{
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'REDEMPTION')
+    if(!is.null(vAddScore)){
+      rv$playerSelected <- ''
+      rv$refresh <- rv$refresh  + 1 
+    }
+  })
+  
+  observeEvent(input$btnRefresh,{
+    rv$teamSelected <- ''
+    rv$playerSelected <- ''
+    rv$refreshGameList <- rv$refreshGameList + 1
+    rv$refresh <- rv$refresh + 1
   })
   
   
