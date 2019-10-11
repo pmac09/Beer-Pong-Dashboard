@@ -18,8 +18,6 @@ library(reactlog)
 # Source functions
 sourceAll('./functions')
 
-
-
 ## UI -----
 ui <- dashboardPage(
   title = "Beer Pong Dashboard",
@@ -32,7 +30,8 @@ ui <- dashboardPage(
     collapsed = TRUE,
     sidebarMenu(
       menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
-      menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs"))
+      menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs")),
+      menuItem("test",  tabName = "tabtest",  icon = icon("cogs"))
     )
   ),
   
@@ -49,6 +48,7 @@ ui <- dashboardPage(
         tabName = "tabSettings",
         source('./ui/uiSettings.R', local= TRUE)$value
       )
+    
     )
     
   )

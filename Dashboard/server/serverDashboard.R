@@ -20,11 +20,23 @@ team <- function(vTeamList, vteamName){
 } # Returns players from selected team
 
 gameData <- function(vGameName, vTournamentName){
+  
+  if(is.null(vGameName)) return(NULL)
+  
   path <- paste0(vTournamentName, "/data/", vGameName)
   data <- firebaseDownload(projectURL, path)
+  
+  
+  if(is.null(data)){
+    return(NULL)
+  } else {
+    data <- data %>%
+      select(DATE_TIME, GAME, TEAM, PLAYER, SHOT_TYPE)
+  }
+  
   return(data)
 }
-statsData <- function(game, gameData){
+statsData <- function(game, vGameData){
   
   if(is.null(game)){
     return(NULL)
@@ -38,8 +50,12 @@ statsData <- function(game, gameData){
   noPlayers <- ifelse(substr(gameName,1,1)=='I',2,4)
   
   # Download game data from firebase
-  data <- as_tibble(gameData)
-  
+  if(is.null(vGameData)){
+    return(NULL)
+    } else {
+      data <- vGameData
+    }
+    
   # Calcuate cumulative scoring
   data1 <- data[,c("DATE_TIME", "GAME", "TEAM", "PLAYER", "SHOT_TYPE")] %>% # Reorder columns
     mutate(HOME_TEAM = homeTeam) %>%                                        # Add home team
@@ -60,12 +76,14 @@ statsData <- function(game, gameData){
     mutate(TARGET = target)
   
   # Calculate target if theres a draw
+  if(nrow(data1) >= 2){
   for (row in 2:nrow(data1)) {
     data1$TARGET[row] <- ifelse(data1$HOME_SCORE_CUMUL[row] == data1$AWAY_SCORE_CUMUL[row] & data1$HOME_SCORE_CUMUL[row] == data1$TARGET[row-1],
                                 data1$TARGET[row-1] + 3,
                                 data1$TARGET[row-1])
   }
-  
+  }
+    
   data2 <- data1 %>%
     mutate(WINNER = ifelse((TARGET == HOME_SCORE_CUMUL | TARGET == AWAY_SCORE_CUMUL) &
                              HOME_SCORE_CUMUL != AWAY_SCORE_CUMUL &
@@ -122,9 +140,89 @@ shotChange <- function(OTHER_TEAM, SHOT_TYPE){
 }  # Evaluates stats line to determine shot increment
 maxScore <- function(target){  target * 20 + (target*(target+1) / 2)} # Used in Fantasy Points scaling
 
+rawData <- function(vGameList, vTournamentName){
+  path <- paste0(vTournamentName, "/data/")
+  data <- firebaseDownload(projectURL, path)
+  
+  if(is.null(data)) return(NULL)
+  
+  leagueSummary <- tibble()
+  leagueStats <- tibble()
+  for(i in 1:nrow(vGameList)){
+    
+    stats <- statsData(vGameList[i,], data[[vGameList[i,]$GAME_NAME]])
+    leagueStats <- bind_rows(leagueStats, stats)
+    
+  }
+  
+  return(leagueStats) 
+}
+
+playerStats <- function(vStatsData){
+  
+  if(is.null(vStatsData)){
+    return(NULL)
+  }
+  
+  data <- vStatsData %>%
+    group_by(GAME, TEAM, PLAYER) %>%
+    summarise(
+      HITS         = sum(ifelse(SCORE_CHANGE>0,1,0)),
+      THROWS       = sum(SHOT_CHANGE),
+      OVERTHROWS   = sum(ifelse(SHOT_TYPE == 'OVERTHROW',1,0)),
+      CLUTCH       = sum(CLUTCH),
+      T_HITS       = sum(ifelse(SHOT_TYPE == 'TRICKSHOT HIT',1,0)),
+      T_THROWS     = sum(ifelse(SHOT_TYPE %in% c('TRICKSHOT HIT','TRICKSHOT MISS'),1,0)),
+      WINNER       = sum(WINNER)
+    ) %>%
+    arrange(PLAYER) %>%
+    mutate(PCNT = ifelse(THROWS>0,round(HITS/THROWS*100,1),0))
+  
+  if(nrow(vStatsData)<2){
+    data$FANTASY <- vStatsData[nrow(vStatsData), grep('PLAYER\\d_FP_SCALE',  names(vStatsData))]
+  } else {
+    fantasy <- gather(vStatsData[nrow(vStatsData), grep('PLAYER\\d_FP_SCALE',  names(vStatsData))]) %>%
+      arrange(key)
+    data$FANTASY <- fantasy$value
+  }
+  
+  
+  #data$ICON <- c('gun', 'target', 'garbage', 'cone')[1:nrow(data)]
+  
+  drySpell <- vStatsData %>%
+    filter(SHOT_CHANGE == 1) %>%
+    arrange(PLAYER, row_number()) %>%
+    select(GAME,PLAYER, SHOT_CHANGE,SCORE_CHANGE) %>%
+    mutate(THROW_COUNT = cumsum(SCORE_CHANGE) - SCORE_CHANGE) %>%
+    group_by(GAME, PLAYER, THROW_COUNT) %>%
+    summarise(THROWS = n()) %>%
+    ungroup() %>%
+    group_by(GAME, PLAYER) %>%
+    summarise(DRY_SPELL = max(THROWS)) %>%
+    ungroup()
+  
+  vTeamData <- vStatsData %>%
+    group_by(GAME, TEAM) %>%
+    summarise(
+      PLAYERS      = n_distinct(PLAYER),
+      CUPS_FOR     = max(TEAM_SCORE_CUMUL),
+      CUPS_AGAINST = max(OPPO_SCORE_CUMUL) + (1 - sum(WINNER))
+    ) %>%
+    arrange(TEAM) %>%
+    ungroup()
+
+  vTeamData2 <- left_join(data, vTeamData[,c(2:5)], by=c('TEAM'='TEAM')) %>%
+    mutate(CARRIER = ifelse(CUPS_FOR>0,round(HITS/CUPS_FOR*100,1), 0))
+
+  vTeamData3 <- left_join(vTeamData2, drySpell[,c(2:3)], by=c('PLAYER' = 'PLAYER'))
+  
+  return(vTeamData3)
+}
+
 leagueData <- function(games, vTournamentName){
   
-  data <- gameData(NULL, vTournamentName)
+  path <- paste0(vTournamentName, "/data/")
+  data <- firebaseDownload(projectURL, path)
   
   if(is.null(data)) return(NULL)
   
@@ -135,7 +233,7 @@ leagueData <- function(games, vTournamentName){
     stats <- statsData(games[i,], data[[games[i,]$GAME_NAME]])
     leagueStats <- bind_rows(leagueStats, stats)
     
-    stats2 <- statline(stats)
+    stats2 <- playerStats(stats)
     leagueSummary <- bind_rows(leagueSummary, stats2)
   }
  
@@ -179,12 +277,15 @@ teamData <- function(ldata){
       THROWS     = sum(THROWS),
       OT         = sum(OVERTHROWS),
       CLT        = sum(CLUTCH),
-      FP         = round(mean(FANTASY),1)
+      FP         = round(mean(FANTASY),1),
+      CF         = sum(CUPS_FOR)/2,
+      CA         = sum(CUPS_AGAINST)/2
     ) %>%
     mutate(L    = P - W) %>%
     mutate('T%' = paste0(ifelse(THROWS>0, round(HITS / THROWS * 100,1), 0),"%")) %>%
-    arrange(desc(FP)) %>%
-    select(TEAM, P, W, L, 'T%', CLT, OT, FP)
+    mutate('C%' = paste0(round(CF / (CA+0.000001) * 100,1), 0),"%") %>%
+    arrange(desc(W), desc('C%')) %>%
+    select(TEAM, P, W, CF, CA,'C%', 'T%',  CLT, OT, FP)
   
   return(data)
 }
@@ -211,7 +312,7 @@ statline <- function(gameData){
     arrange(key)
   
   data$FANTASY <- fantasy$value
-  data$ICON <- c('gun', 'target', 'garbage', 'cone')[1:nrow(data)]
+  #data$ICON <- c('gun', 'target', 'garbage', 'cone')[1:nrow(data)]
   
   return(data)
 }
@@ -236,21 +337,23 @@ displayTeam <- function(teamName, teamScore, scoreColour, player1, player2){
   return(ui)
 }
 displayPlayer <- function(player){
-  
+
   if(is.null(player)){
     playerPic  = "BLANK.png"
     playerName = "PLAYER"
     lineOne    = "0 - 0 (0%) | FP: 0"
     lineTwo    = "TS: 0 - 0 | CLT: 0 | OT: 0"
     icon       = NULL
+  } else if(nrow(player) == 0){
+    return(NULL)   
   } else if(is.na(player$PLAYER)[1]){
     return(NULL)
   } else {
-    playerPic  = paste0(player$PLAYER, '.jpg')
+    playerPic  = ifelse(exists(paste0(player$PLAYER, '.jpg')), paste0(player$PLAYER, '.jpg'),"BLANK.png")
     playerName = player$PLAYER
     lineOne    = paste0(player$HITS," - ",player$THROWS, " (", ifelse(player$THROWS>0,round(player$HITS/player$THROWS*100,1),0), "%) | FP: ", player$FANTASY)
     lineTwo    = paste0("TS: ",player$T_HITS," - ",player$T_THROWS," | CLT: ",player$CLUTCH," | OT: ",player$OVERTHROWS)
-    icon       = paste0("./icons/", player$ICON ,".gif")
+    icon       = NULL #paste0("./icons/", player$ICON ,".gif")
   }
   
   ui <- list(
@@ -309,7 +412,7 @@ uiGameDetails <- function(homeTeam=NULL, awayTeam=NULL, gameData=NULL){
 }
 uiScoreWorm <- function(game, gameData){
   
-  if(is.null(game)){
+  if(is.null(game) | is.null(gameData)){
     return(NULL)
   }
   
@@ -468,15 +571,23 @@ uiFantasyWorm <- function(gameData){
 }
 
 ## REACTIVE FUNCTIONS ----
+rv <- reactiveValues(gameData = 0)
 game_r <- reactive({
   game <- game(gameList_r(), input$lstGameSelected)
   return(game)
 }) 
 statsData_r <- reactive({
+  
+  if(input$cbxLive){
+    invalidateLater(5*1000)
+    print('update')
+  }
+  
   statsData <- statsData(game_r(), gameData(game_r()$GAME_NAME, tournamentName_r()))
   return(statsData)
 }) 
 leagueData_r <- reactive({
+  input$lstGameSelected
   data <- leagueData(gameList_r(), tournamentName_r())
   return(data)
 })
@@ -562,6 +673,144 @@ output$tblTeamStats <- renderDataTable({
   
 })
 
+output$uiFantasyPig <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      arrange(desc(FANTASY), desc(HITS))
+    
+    first <- ifelse(!is.na(smy$FANTASY[1]),  paste0(smy$FANTASY[1],' - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$FANTASY[2]), paste0(smy$FANTASY[2],' - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$FANTASY[3]),  paste0(smy$FANTASY[3],' - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "FANTASY PIG", 
+                  icon=icon('piggy-bank'), 
+                  color='green', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  return(ui)
+})
+output$uiRobinHood <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      arrange(desc(PCNT), desc(HITS))
+    
+    first <- ifelse(!is.na(smy$PCNT[1]),  paste0(smy$PCNT[1],'% - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$PCNT[2]), paste0(smy$PCNT[2],'% - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$PCNT[3]),  paste0(smy$PCNT[3],'% - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "ROBIN HOOD", 
+                  icon=icon('crosshairs'), 
+                  color='green', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  
 
-
-
+  return(ui)
+})
+output$uiAtlas <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      filter(PLAYERS > 1) %>%
+      arrange(desc(CARRIER), desc(HITS))
+    
+    first <- ifelse(!is.na(smy$CARRIER[1]),  paste0(smy$CARRIER[1],'% - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$CARRIER[2]), paste0(smy$CARRIER[2],'% - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$CARRIER[3]),  paste0(smy$CARRIER[3],'% - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "ATLAS", 
+                  icon=icon('hands'), 
+                  color='orange', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  
+  return(ui)
+})
+output$uiSpud <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      arrange(FANTASY, HITS)
+    
+    first <- ifelse(!is.na(smy$FANTASY[1]),  paste0(smy$FANTASY[1],' - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$FANTASY[2]), paste0(smy$FANTASY[2],' - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$FANTASY[3]),  paste0(smy$FANTASY[3],' - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "SPUD", 
+                  icon=icon('poop'), 
+                  color='red', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  
+  return(ui)
+})
+output$uiDrySpell <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      arrange(desc(DRY_SPELL), THROWS)
+    
+    first <- ifelse(!is.na(smy$DRY_SPELL[1]),  paste0(smy$DRY_SPELL[1],' - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$DRY_SPELL[2]), paste0(smy$DRY_SPELL[2],' - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$DRY_SPELL[3]),  paste0(smy$DRY_SPELL[3],' - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "DRY SPELL", 
+                  icon=icon('tint'), 
+                  color='blue', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  
+  return(ui)
+})

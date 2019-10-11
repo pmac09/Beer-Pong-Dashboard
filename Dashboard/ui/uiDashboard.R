@@ -26,12 +26,13 @@ fluidRow(
   column(## RIGHT SIDE -----
          width = 7, 
          
-         leaderBox(title= "FANTASY PIG", icon=icon('piggy-bank'), color='green', width = 4),
-         leaderBox(title= "ROBIN HOOD",  icon=icon('crosshairs'), color='green', width = 4),
+         uiOutput('uiFantasyPig'),
+         uiOutput('uiRobinHood'),
+         
          leaderBox(title= "STREAKER",    icon=icon('angle-double-right'), color='green', width = 4),
-         leaderBox(title= "ATLAS",       icon=icon('hands'), color='orange', width = 4),
-         leaderBox(title= "LIABILITY",   icon=icon('exclamation-triangle'), color='red', width = 4),
-         leaderBox(title= "DRY SPELL",   icon=icon('tint'), color='blue', width = 4, third= "NAme is way too long so it should cut off"),
+         uiOutput('uiAtlas'),
+         uiOutput('uiSpud'),
+         uiOutput('uiDrySpell'),
          
          ## PLAYER STATS
          box(

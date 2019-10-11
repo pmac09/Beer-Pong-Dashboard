@@ -338,7 +338,7 @@ server <- function(input, output, session) {
     }
   })
   observeEvent(input$btnTrickMiss,{
-    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'TIRCKSHOT MISS')
+    vAddScore <- addScore(tournamentName_r(), gameData_r(), input$lstGames, rv$teamSelected, rv$playerSelected, 'TRICKSHOT MISS')
     if(!is.null(vAddScore)){
       rv$playerSelected <- ''
       rv$refresh <- rv$refresh  + 1 
