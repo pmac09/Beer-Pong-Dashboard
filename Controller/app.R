@@ -115,6 +115,20 @@ server <- function(input, output, session) {
   gameData <- function(vGameName, vTournamentName){
     path <- paste0(vTournamentName, "/data/", vGameName)
     data <- firebaseDownload(projectURL, path)
+    
+    if(is.null(data)){
+      data <- tibble(
+        DATE_TIME = character(),
+        GAME      = character(),
+        TEAM      = character(),
+        PLAYER    = character(),
+        SHOT_TYPE = character()
+      )
+    } else {
+      data <- data %>%
+        select(DATE_TIME, GAME, TEAM, PLAYER, SHOT_TYPE)
+    }
+    
     return(data)
   }
   
@@ -124,9 +138,15 @@ server <- function(input, output, session) {
       return(NULL)
     }
     
-    vTime <- as.character(Sys.time())
+    vNewGameData <- tibble(
+      DATE_TIME = as.character(Sys.time()),
+      GAME      = vGameName,
+      TEAM      = vTeamName,
+      PLAYER    = vPlayerName,
+      SHOT_TYPE = vShotType
+    )
     
-    vNewGameData <- rbind(vGameData, c(vTime, vGameName, vPlayerName, vShotType, vTeamName))
+    vNewGameData <- rbind(vGameData, vNewGameData)
     
     # Save to firebase
     dir <- paste0(vTournamentName,'/data/', vGameName)
