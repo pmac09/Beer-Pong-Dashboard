@@ -283,11 +283,13 @@ teamData <- function(ldata){
     ) %>%
     mutate(L    = P - W) %>%
     mutate('T%' = paste0(ifelse(THROWS>0, round(HITS / THROWS * 100,1), 0),"%")) %>%
+    mutate(C_PCNT = round(CF / (CA+0.000001),1)) %>%
     mutate('C%' = paste0(round(CF / (CA+0.000001) * 100,1), 0),"%") %>%
-    arrange(desc(W), desc('C%')) %>%
-    select(TEAM, P, W, CF, CA,'C%', 'T%',  CLT, OT, FP)
+    mutate(rank = W + C_PCNT ) %>%
+    arrange(desc(rank)) %>%
+    select(TEAM, P, W, CF, CA,'C%', 'T%',  CLT, OT, FP) 
   
-  return(data)
+ return(data)
 }
 statline <- function(gameData){
   
@@ -338,6 +340,8 @@ displayTeam <- function(teamName, teamScore, scoreColour, player1, player2){
 }
 displayPlayer <- function(player){
 
+  print(player$PLAYER)
+  
   if(is.null(player)){
     playerPic  = "BLANK.png"
     playerName = "PLAYER"
@@ -349,7 +353,7 @@ displayPlayer <- function(player){
   } else if(is.na(player$PLAYER)[1]){
     return(NULL)
   } else {
-    playerPic  = ifelse(exists(paste0(player$PLAYER, '.jpg')), paste0(player$PLAYER, '.jpg'),"BLANK.png")
+    playerPic  = paste0(player$PLAYER, '.jpg')
     playerName = player$PLAYER
     lineOne    = paste0(player$HITS," - ",player$THROWS, " (", ifelse(player$THROWS>0,round(player$HITS/player$THROWS*100,1),0), "%) | FP: ", player$FANTASY)
     lineTwo    = paste0("TS: ",player$T_HITS," - ",player$T_THROWS," | CLT: ",player$CLUTCH," | OT: ",player$OVERTHROWS)
