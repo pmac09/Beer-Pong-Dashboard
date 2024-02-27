@@ -28,8 +28,8 @@ fluidRow(
          
          uiOutput('uiFantasyPig'),
          uiOutput('uiRobinHood'),
+         uiOutput('uiStreaker'),
          
-         leaderBox(title= "STREAKER",    icon=icon('angle-double-right'), color='green', width = 4),
          uiOutput('uiAtlas'),
          uiOutput('uiSpud'),
          uiOutput('uiDrySpell'),

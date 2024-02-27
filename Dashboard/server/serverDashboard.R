@@ -186,8 +186,23 @@ playerStats <- function(vStatsData){
     data$FANTASY <- fantasy$value
   }
   
+  streaker <- vStatsData %>%
+    filter(TEAM_SCORE_CHANGE == 1) %>%
+    select(DATE_TIME, GAME, TEAM, PLAYER, SHOT_TYPE) %>%
+    mutate(STREAK = 1) 
   
-  #data$ICON <- c('gun', 'target', 'garbage', 'cone')[1:nrow(data)]
+  if(nrow(streaker)>1){
+    for(i in 2:nrow(streaker)){
+      if(streaker$PLAYER[i] == streaker$PLAYER[i-1]){
+        streaker$STREAK[i] <- streaker$STREAK[i-1] + 1
+      }
+    }
+  }
+  
+  streaker2 <- streaker %>%
+    group_by(PLAYER) %>%
+    summarise(STREAK = max(STREAK))
+  
   
   drySpell <- vStatsData %>%
     filter(SHOT_CHANGE == 1) %>%
@@ -214,7 +229,8 @@ playerStats <- function(vStatsData){
   vTeamData2 <- left_join(data, vTeamData[,c(2:5)], by=c('TEAM'='TEAM')) %>%
     mutate(CARRIER = ifelse(CUPS_FOR>0,round(HITS/CUPS_FOR*100,1), 0))
 
-  vTeamData3 <- left_join(vTeamData2, drySpell[,c(2:3)], by=c('PLAYER' = 'PLAYER'))
+  vTeamData3 <- left_join(vTeamData2, drySpell[,c(2:3)], by=c('PLAYER' = 'PLAYER')) %>%
+    left_join(streaker2, by=c('PLAYER'))
   
   return(vTeamData3)
 }
@@ -282,11 +298,12 @@ teamData <- function(ldata){
       CA         = sum(CUPS_AGAINST)/2
     ) %>%
     mutate(L    = P - W) %>%
+    mutate(T_PCNT = ifelse(THROWS>0, round(HITS / THROWS * 100,1), 0)) %>%
     mutate('T%' = paste0(ifelse(THROWS>0, round(HITS / THROWS * 100,1), 0),"%")) %>%
     mutate(C_PCNT = round(CF / (CA+0.000001),1)) %>%
-    mutate('C%' = paste0(round(CF / (CA+0.000001) * 100,1), 0),"%") %>%
+    mutate('C%' = paste0(round(CF / (CA+0.000001) * 100,0),"%")) %>%
     mutate(rank = W + C_PCNT ) %>%
-    arrange(desc(rank)) %>%
+    arrange(desc(rank), desc(CF), desc(FP), desc(T_PCNT)) %>%
     select(TEAM, P, W, CF, CA,'C%', 'T%',  CLT, OT, FP) 
   
  return(data)
@@ -359,6 +376,8 @@ displayPlayer <- function(player){
     lineTwo    = paste0("TS: ",player$T_HITS," - ",player$T_THROWS," | CLT: ",player$CLUTCH," | OT: ",player$OVERTHROWS)
     icon       = NULL #paste0("./icons/", player$ICON ,".gif")
   }
+  
+  message(playerPic)
   
   ui <- list(
     playerListItem(
@@ -818,3 +837,32 @@ output$uiDrySpell <- renderUI({
   
   return(ui)
 })
+output$uiStreaker <- renderUI({
+  
+  data <- leagueData_r()
+  
+  first <- NULL
+  second <- NULL
+  third <- NULL
+  
+  if(!is.null(data)){
+    
+    smy <- data %>%
+      arrange(desc(STREAK), THROWS)
+    
+    first <- ifelse(!is.na(smy$STREAK[1]),  paste0(smy$STREAK[1],' - ' ,smy$PLAYER[1]),'')
+    second <- ifelse(!is.na(smy$STREAK[2]), paste0(smy$STREAK[2],' - ' ,smy$PLAYER[2]),'')
+    third <- ifelse(!is.na(smy$STREAK[3]),  paste0(smy$STREAK[3],' - ' ,smy$PLAYER[3]),'')
+  }
+  
+  ui <- leaderBox(title= "STREAKER", 
+                  icon=icon('angle-double-right'), 
+                  color='green', 
+                  width = 4,
+                  first = first,
+                  second = second,
+                  third = third)
+  
+  return(ui)
+})
+

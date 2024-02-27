@@ -3,7 +3,6 @@
 options(stringsAsFactors = FALSE)
 options(shiny.reactlog = TRUE)
 
-
 library(shiny)
 library(shinyWidgets)
 library(shinydashboard)
@@ -20,7 +19,7 @@ sourceAll('./functions')
 
 ## UI -----
 ui <- dashboardPage(
-  title = "Beer Pong Dashboard",
+  title = "Beer Pong Dashboard", 
   
   ## HEADER ----
   dashboardHeader(title = textOutput('txtTournamentName')),
@@ -30,8 +29,7 @@ ui <- dashboardPage(
     collapsed = TRUE,
     sidebarMenu(
       menuItem("Dashboard", tabName = "tabDashboard", icon = icon("dashboard")),
-      menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs")),
-      menuItem("test",  tabName = "tabtest",  icon = icon("cogs"))
+      menuItem("Settings",  tabName = "tabSettings",  icon = icon("cogs"))
     )
   ),
   

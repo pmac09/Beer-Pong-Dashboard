@@ -17,8 +17,8 @@ ui <- miniPage(
   ## TITLE ----
   gadgetTitleBar(
     "Beer Pong Dashboard",
-    left  = miniTitleBarButton("btnRefresh", icon("sync"), primary = FALSE),
-    right = miniTitleBarButton("btnUndo", icon("undo"), primary = TRUE)
+    left  = miniTitleBarButton("btnRefreshSC", icon("sync"), primary = FALSE),
+    right  = miniTitleBarButton("btnRefreshFF", paste0(icon("synunc"),'Fanfooty'), primary = FALSE),
   ),
   miniTabstripPanel(
     
